@@ -1,0 +1,233 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: myapp-pv
+  labels: 
+    tpye: myapp-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  #persistentVolumeReclaimPolicy: Recycle
+  nfs:
+    path: "/home/gsta/nfsshare/myapp_pv"
+    server: 192.168.137.128
+    readOnly: false
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: myapp-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mydb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: mydb
+  template:
+    metadata:
+      labels:
+        run: mydb
+    spec:
+      containers:
+      - name: etcd 
+        image: rancher/coreos-etcd:v3.4.16-amd64
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: myapp_env
+          value: etcdenv
+        ports:
+        - name: etcdport
+          containerPort: 2379
+      - name: redis
+        image: redis:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: myapp_env
+          value: redisenv
+        ports:
+        - name: redisport
+          containerPort: 6379
+      volumes:
+        - name: myapp-pv
+          persistentVolumeClaim:
+            claimName: myapp-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mydb
+  labels:
+    run: mydb
+spec:
+  selector:
+    run: mydb
+  clusterIP: 10.96.0.2
+  ports:
+  - name: etcd
+    protocol: TCP
+    port: 2379
+    targetPort: etcdport
+  - name: redis
+    protocol: TCP
+    port: 6379
+    targetPort: redisport
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mynginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      run: mynginx
+  template:
+    metadata:
+      labels:
+        run: mynginx
+    spec:
+      containers:
+      - name: nginx 
+        image: nginx:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: myapp_env
+          value: nginxenv
+        ports:
+        - name: nginxport
+          containerPort: 80
+      volumes:
+        - name: myapp-pv
+          persistentVolumeClaim:
+            claimName: myapp-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mynginx
+  labels:
+    run: mynginx
+spec:
+  selector:
+    run: mynginx
+  clusterIP: 10.96.0.3
+  ports:
+  - name: nginx
+    protocol: TCP
+    port: 80
+    targetPort: nginxport
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myhttpd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: myhttpd
+  template:
+    metadata:
+      labels:
+        run: myhttpd
+    spec:
+      containers:
+      - name: httpd 
+        image: httpd:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: myapp_env
+          value: httpdenv
+        ports:
+        - name: httpdport
+          containerPort: 80
+      volumes:
+        - name: myapp-pv
+          persistentVolumeClaim:
+            claimName: myapp-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myhttpd
+  labels:
+    run: myhttpd
+spec:
+  selector:
+    run: myhttpd
+  clusterIP: 10.96.0.4
+  ports:
+  - name: httpd
+    protocol: TCP
+    port: 80
+    targetPort: httpdport
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mynettools
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: mynettools
+  template:
+    metadata:
+      labels:
+        run: mynettools
+    spec:
+      containers:
+      - name: mynettools 
+        image: donch/net-tools:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash","-c","--"]
+        args: ["while true; do sleep 30; done;"]
+        securityContext:
+          privileged: true 
+        env:
+        - name: myapp_env
+          value: nettoolsenv
+        ports:
+        - name: nettoolsport
+          containerPort: 80
+      volumes:
+        - name: myapp-pv
+          persistentVolumeClaim:
+            claimName: myapp-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mynettools
+  labels:
+    run: mynettools
+spec:
+  selector:
+    run: mynettools
+  clusterIP: 10.96.0.5
+  ports:
+  - name: nettools
+    protocol: TCP
+    port: 80
+    targetPort: nettoolsport
