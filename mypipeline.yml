@@ -1,0 +1,71 @@
+pipeline {
+    agent {
+        node {
+            label 'mynode' && 'master'
+        }
+    }
+    stages {
+        stage('Delete') {
+            agent {
+                label 'mynode'
+            }
+            steps {
+                dir('/home/gsta/myapp') {
+                    sh 'kubectl delete -f myapp.yaml'
+                    sh 'sleep 60'
+                }
+            }
+        }
+        stage('Create') {
+            agent {
+                label 'mynode'
+            }
+            steps {
+                dir('/home/gsta/myapp') {
+                    sh 'kubectl apply -f myapp.yaml --v=5'
+                    sh 'sleep 5'
+                }
+            }
+        }
+        stage('Get pods') {
+            agent {
+                label 'mynode'
+            }
+            steps {
+                sh 'kubectl get pods --all-namespaces -o wide'
+            }
+        }
+        stage('Get svc') {
+            agent {
+                label 'mynode'
+            }
+            steps {
+                sh 'kubectl get --all-namespaces svc'
+            }
+        }
+        stage('Get endpoints') {
+            agent {
+                label 'mynode'
+            }
+            steps {
+                sh 'kubectl get --all-namespaces endpoints'
+            }
+        }
+        stage('Check httpd') {
+            agent {
+                label 'master'
+            }
+            steps {
+                bat 'curl 10.96.0.4'
+            }
+        }
+        stage('Check nginx') {
+            agent {
+                label 'master'
+            }
+            steps {
+                bat 'curl 10.96.0.3'
+            }
+        }        
+    }
+}
